@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+.next/
+public/bundle.js
+public/bundle.js.map
+public/styles.css
+
+# Environment / secrets (never commit keys)
+.env
+.env.*
+!.env.example
+
+# Runtime data & logs
+prisma/dev_db.json
+prisma/dev.db
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db

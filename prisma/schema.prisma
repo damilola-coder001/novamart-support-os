@@ -1,0 +1,261 @@
+// NovaMart Support Platform - Prisma Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String
+  role         String        @default("CUSTOMER") // "CUSTOMER", "SUPPORT_AGENT", "ADMIN"
+  avatar       String?
+  passwordHash String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  customer     Customer?
+  agent        SupportAgent?
+}
+
+model Customer {
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone              String?
+  address            String?
+  city               String?
+  state              String?
+  postalCode         String?
+  country            String             @default("United States")
+  emailNotifications Boolean            @default(true)
+  vipTier            String             @default("STANDARD") // "STANDARD", "SILVER", "GOLD", "PLATINUM"
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  orders             Order[]
+  payments           Payment[]
+  returns            ReturnRequest[]
+  conversations      Conversation[]
+  tickets            Ticket[]
+  emailEvents        EmailEvent[]
+  feedback           CustomerFeedback[]
+}
+
+model SupportAgent {
+  id                  String         @id @default(uuid())
+  userId              String         @unique
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department          String         @default("General Support")
+  isAvailable         Boolean        @default(true)
+  activeConversations Int            @default(0)
+  maxConcurrent       Int            @default(5)
+  rating              Float          @default(4.9)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  conversations       Conversation[]
+  tickets             Ticket[]
+}
+
+model Product {
+  id               String      @id @default(uuid())
+  sku              String      @unique
+  name             String
+  description      String
+  category         String
+  price            Float
+  stock            Int         @default(100)
+  returnPolicyDays Int         @default(30)
+  specs            String?     // JSON string
+  imageUrl         String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  orderItems       OrderItem[]
+}
+
+model Order {
+  id                String          @id @default(uuid())
+  orderNumber       String          @unique
+  customerId        String
+  customer          Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status            String          @default("PROCESSING") // "PROCESSING", "SHIPPED", "DELIVERED", "DELAYED", "CANCELLED"
+  totalAmount       Float
+  shippingAddress   String
+  trackingNumber    String?
+  carrier           String?
+  estimatedDelivery DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  items             OrderItem[]
+  payments          Payment[]
+  returns           ReturnRequest[]
+}
+
+model OrderItem {
+  id               String   @id @default(uuid())
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity         Int      @default(1)
+  unitPrice        Float
+  isReturnEligible Boolean  @default(true)
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amount        Float
+  method        String   // "CREDIT_CARD", "PAYPAL", "APPLE_PAY", "STORE_CREDIT"
+  status        String   @default("COMPLETED") // "COMPLETED", "PENDING", "FAILED", "REFUNDED", "DISPUTED"
+  transactionId String   @unique
+  lastFour      String?
+  createdAt     DateTime @default(now())
+}
+
+model ReturnRequest {
+  id           String   @id @default(uuid())
+  returnNumber String   @unique
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status       String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED", "ITEM_RECEIVED", "REFUNDED", "COMPLETED"
+  reason       String
+  returnItems  String   // JSON string of item IDs and quantities
+  trackingNumber String?
+  refundAmount Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Conversation {
+  id                 String            @id @default(uuid())
+  conversationNumber String            @unique
+  customerId         String
+  customer           Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedAgentId    String?
+  assignedAgent      SupportAgent?     @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  status             String            @default("AI_HANDLING") // "AI_HANDLING", "NEEDS_HUMAN", "AGENT_ACTIVE", "RESOLVED", "CLOSED"
+  category           String            @default("GENERAL") // "ORDER_STATUS", "DELIVERY", "RETURN", "REFUND", "PAYMENT", "PRODUCT", "ACCOUNT", "GENERAL", "COMPLAINT"
+  priority           String            @default("MEDIUM") // "LOW", "MEDIUM", "HIGH", "URGENT"
+  aiConfidence       Float             @default(0.95)
+  aiIntent           String            @default("GENERAL_FAQ")
+  summary            String?
+  channel            String            @default("WEB_CHAT")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  resolvedAt         DateTime?
+
+  messages           Message[]
+  tickets            Ticket[]
+  feedback           CustomerFeedback?
+}
+
+model Message {
+  id               String       @id @default(uuid())
+  conversationId   String
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderType       String       // "CUSTOMER", "AI", "AGENT", "SYSTEM"
+  senderName       String
+  content          String
+  attachments      String?      // JSON array of URLs / file metadata
+  toolCalls        String?      // JSON string of tool execution details
+  isPrivateCopilot Boolean      @default(false)
+  metadata         String?      // JSON string
+  createdAt        DateTime     @default(now())
+}
+
+model Ticket {
+  id              String        @id @default(uuid())
+  ticketNumber    String        @unique
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedAgentId String?
+  assignedAgent   SupportAgent? @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  category        String        @default("GENERAL")
+  priority        String        @default("MEDIUM") // "LOW", "MEDIUM", "HIGH", "URGENT"
+  status          String        @default("OPEN") // "OPEN", "IN_PROGRESS", "WAITING_FOR_CUSTOMER", "WAITING_FOR_INTERNAL_ACTION", "RESOLVED", "CLOSED"
+  aiSummary       String?
+  resolutionNote  String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  resolvedAt      DateTime?
+}
+
+model KnowledgeArticle {
+  id           String   @id @default(uuid())
+  slug         String   @unique
+  title        String
+  category     String   // "SHIPPING", "RETURNS", "REFUNDS", "PAYMENTS", "PRODUCTS", "ACCOUNT", "SUPPORT_POLICY"
+  content      String
+  excerpt      String
+  isPublished  Boolean  @default(true)
+  viewCount    Int      @default(0)
+  helpfulCount Int      @default(0)
+  tags         String   // JSON string or comma-separated
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Notification {
+  id            String   @id @default(uuid())
+  recipientRole String   @default("SUPPORT_AGENT") // "CUSTOMER", "SUPPORT_AGENT", "ADMIN", "ALL"
+  recipientId   String?
+  title         String
+  message       String
+  type          String   // "NEW_CONVERSATION", "ESCALATION", "TICKET_UPDATE", "EMAIL_SENT", "SYSTEM_ALERT"
+  isRead        Boolean  @default(false)
+  link          String?
+  createdAt     DateTime @default(now())
+}
+
+model EmailEvent {
+  id             String    @id @default(uuid())
+  customerId     String?
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  recipientEmail String
+  subject        String
+  templateType   String    // "TICKET_CREATED", "RETURN_SUBMITTED", "RETURN_APPROVED", "REFUND_INITIATED", "AGENT_REPLY", "ISSUE_RESOLVED"
+  contentPreview String
+  htmlContent    String
+  status         String    @default("SENT") // "SENT", "QUEUED", "FAILED"
+  metadata       String?   // JSON string
+  createdAt      DateTime  @default(now())
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  actorType  String   // "CUSTOMER", "AI", "AGENT", "ADMIN", "SYSTEM"
+  actorId    String?
+  actorName  String
+  action     String   // "LOGIN", "MESSAGE_SENT", "AI_INTENT_CLASSIFIED", "AI_TOOL_CALLED", "AI_ESCALATED", "TICKET_CREATED", "TICKET_ASSIGNED", "TICKET_UPDATED", "TICKET_RESOLVED", "AGENT_TAKEOVER", "RETURN_CREATED", "REFUND_ISSUED", "EMAIL_SENT", "EMAIL_PREFERENCE_UPDATED", "CSAT_SUBMITTED"
+  entityType String?  // "Conversation", "Ticket", "Order", "ReturnRequest", "User", "EmailEvent"
+  entityId   String?
+  details    String?  // JSON string
+  createdAt  DateTime @default(now())
+}
+
+model CustomerFeedback {
+  id             String       @id @default(uuid())
+  conversationId String       @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  rating         Int          // 1 (Negative / No) or 5 (Positive / Yes)
+  comment        String?
+  createdAt      DateTime     @default(now())
+}
